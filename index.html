@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Almuerzos - Nuestra Escuela</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 450px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px #00000012;
+    }
+
+    h1 {
+      color: #174b4a;
+      font-size: 26px;
+    }
+
+    #reader {
+      width: 100%;
+      margin: 20px auto;
+    }
+
+    #resultado {
+      background: #f0f0f0;
+      padding: 18px;
+      border-radius: 10px;
+      overflow-wrap: anywhere;
+    }
+
+    button {
+      background: #174b4a;
+      color: white;
+      border: none;
+      padding: 14px 20px;
+      border-radius: 8px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <h1>Nuestra Escuela</h1>
+    <h2>Registro de almuerzos</h2>
+    <p>Prueba de escáner QR</p>
+
+    <button id="iniciar">Activar cámara</button>
+    <button id="detener" disabled>Detener cámara</button>
+
+    <div id="reader"></div>
+
+    <div id="resultado">
+      Esperando escaneo...
+    </div>
+
+    <p>Modo de prueba · Sin registro de datos</p>
+  </div>
+
+  <script>
+    const scanner = new Html5Qrcode("reader");
+    const resultado = document.getElementById("resultado");
+    const iniciar = document.getElementById("iniciar");
+    const detener = document.getElementById("detener");
+
+    let ultimoQR = "";
+    let ultimoTiempo = 0;
+
+    function escaneoExitoso(texto) {
+      const ahora = Date.now();
+
+      if (
+        texto === ultimoQR &&
+        ahora - ultimoTiempo < 3000
+      ) {
+        return;
+      }
+
+      ultimoQR = texto;
+      ultimoTiempo = ahora;
+
+      resultado.style.background = "#d1fae5";
+      resultado.style.color = "#065f46";
+
+      resultado.textContent =
+        "QR detectado correctamente: " + texto;
+
+      if (navigator.vibrate) {
+        navigator.vibrate(150);
+      }
+    }
+
+    iniciar.onclick = async function () {
+      iniciar.disabled = true;
+
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 }
+          },
+          escaneoExitoso,
+          function () {}
+        );
+
+        detener.disabled = false;
+        resultado.textContent = "Cámara activa. Escanea un QR.";
+
+      } catch (error) {
+        resultado.textContent = "Error de cámara: " + error;
+        iniciar.disabled = false;
+      }
+    };
+
+    detener.onclick = async function () {
+      try {
+        await scanner.stop();
+        detener.disabled = true;
+        iniciar.disabled = false;
+        resultado.textContent = "Cámara detenida.";
+      } catch (error) {
+        resultado.textContent = "Error: " + error;
+      }
+    };
+  </script>
+
+</body>
+</html>
