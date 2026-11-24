@@ -41,6 +41,7 @@
       padding: 18px;
       border-radius: 10px;
       overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
 
     button {
@@ -74,6 +75,7 @@
 <body>
 
   <div class="container">
+
     <h1>Nuestra Escuela</h1>
     <h2>Registro de almuerzos</h2>
     <p>Escáner QR</p>
@@ -87,15 +89,16 @@
       Esperando escaneo...
     </div>
 
-    <p>Envíos confirmados en esta sesión</p>
+    <p>Tarjetas distintas detectadas</p>
     <div id="contador">0</div>
 
-    <p class="nota">Modo de prueba</p>
+    <p class="nota">
+      Modo de diagnóstico · Sin envío a Google Sheets
+    </p>
+
   </div>
 
   <script>
-    const API_URL =
-      "https://script.google.com/a/macros/nuestraescuela.org/s/AKfycbzkahVGdHkVrlH-aCsn0yp4Y8-DEQDPEROn--1DGA7MpvLZpj4lTJLWlPjJ6ntT9PH6/exec";
 
     const scanner = new Html5Qrcode("reader");
 
@@ -104,11 +107,10 @@
     const detener = document.getElementById("detener");
     const contador = document.getElementById("contador");
 
-    let procesando = false;
-    let total = 0;
+    let ultimoQR = "";
+    let ultimoTiempo = 0;
 
-    const registrados = new Set();
-    const intentos = new Map();
+    const detectados = new Set();
 
     function mostrar(mensaje, fondo, color) {
       resultado.textContent = mensaje;
@@ -116,91 +118,34 @@
       resultado.style.color = color;
     }
 
-    async function escaneoExitoso(texto) {
-
-      const id = texto.trim();
-
-      if (procesando) return;
-
-      if (!/^\d{5,25}$/.test(id)) {
-        mostrar(
-          "Código QR inválido",
-          "#fee2e2",
-          "#991b1b"
-        );
-        return;
-      }
-
-      if (registrados.has(id)) {
-        mostrar(
-          "Tarjeta ya registrada: " + id,
-          "#fef3c7",
-          "#92400e"
-        );
-        return;
-      }
+    function escaneoExitoso(texto) {
 
       const ahora = Date.now();
 
-      if (ahora - (intentos.get(id) || 0) < 3000) {
+      if (
+        texto === ultimoQR &&
+        ahora - ultimoTiempo < 3000
+      ) {
         return;
       }
 
-      intentos.set(id, ahora);
-      procesando = true;
+      ultimoQR = texto;
+      ultimoTiempo = ahora;
+
+      detectados.add(texto);
+
+      contador.textContent = detectados.size;
 
       mostrar(
-        "Enviando registro: " + id,
-        "#dbeafe",
-        "#1e40af"
+        "QR detectado correctamente\n\n" +
+        "Contenido: " + texto + "\n\n" +
+        "Cantidad de caracteres: " + texto.length,
+        "#d1fae5",
+        "#065f46"
       );
 
-      try {
-
-        const respuesta = await fetch(API_URL, {
-          method: "POST",
-          body: new URLSearchParams({ id: id }),
-          redirect: "follow"
-        });
-
-        if (!respuesta.ok) {
-          throw new Error("HTTP " + respuesta.status);
-        }
-
-        const datos = await respuesta.json();
-
-        if (!datos.success) {
-          throw new Error(
-            datos.error || "Registro rechazado"
-          );
-        }
-
-        registrados.add(id);
-
-        total++;
-        contador.textContent = total;
-
-        mostrar(
-          "Registro exitoso: " + id,
-          "#d1fae5",
-          "#065f46"
-        );
-
-        if (navigator.vibrate) {
-          navigator.vibrate(150);
-        }
-
-      } catch (error) {
-
-        mostrar(
-          "No se pudo confirmar el registro: " +
-          error.message,
-          "#fee2e2",
-          "#991b1b"
-        );
-
-      } finally {
-        procesando = false;
+      if (navigator.vibrate) {
+        navigator.vibrate(150);
       }
     }
 
@@ -267,10 +212,13 @@
         );
       }
     };
+
   </script>
 
 </body>
 </html>
+
+
 
 
 
