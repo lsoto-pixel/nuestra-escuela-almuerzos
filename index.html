@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Almuerzos - Nuestra Escuela</title>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -60,7 +61,7 @@
     }
 
     #contador {
-      font-size: 32px;
+      font-size: 42px;
       font-weight: bold;
       color: #174b4a;
     }
@@ -78,7 +79,6 @@
 
     <h1>Nuestra Escuela</h1>
     <h2>Registro de almuerzos</h2>
-    <p>Escáner QR</p>
 
     <button id="iniciar">Activar cámara</button>
     <button id="detener" disabled>Detener cámara</button>
@@ -89,16 +89,17 @@
       Esperando escaneo...
     </div>
 
-    <p>Tarjetas distintas detectadas</p>
+    <p>Almuerzos registrados en esta sesión</p>
     <div id="contador">0</div>
 
-    <p class="nota">
-      Modo de diagnóstico · Sin envío a Google Sheets
-    </p>
+    <p class="nota">Sistema de almuerzos · Modo de prueba</p>
 
   </div>
 
   <script>
+
+    const API_URL =
+      "https://script.google.com/a/macros/nuestraescuela.org/s/AKfycbzkahVGdHkVrlH-aCsn0yp4Y8-DEQDPEROn--1DGA7MpvLZpj4lTJLWlPjJ6ntT9PH6/exec";
 
     const scanner = new Html5Qrcode("reader");
 
@@ -107,45 +108,124 @@
     const detener = document.getElementById("detener");
     const contador = document.getElementById("contador");
 
-    let ultimoQR = "";
-    let ultimoTiempo = 0;
+    let procesando = false;
+    let total = 0;
 
-    const detectados = new Set();
+    const registrados = new Set();
+    const intentos = new Map();
 
     function mostrar(mensaje, fondo, color) {
+
       resultado.textContent = mensaje;
       resultado.style.background = fondo;
       resultado.style.color = color;
+
     }
 
-    function escaneoExitoso(texto) {
+    async function escaneoExitoso(texto) {
 
-      const ahora = Date.now();
+      const id = texto.trim().toUpperCase();
 
-      if (
-        texto === ultimoQR &&
-        ahora - ultimoTiempo < 3000
-      ) {
+      if (procesando) return;
+
+      if (!/^[A-Z]\d{12}[A-Z]$/.test(id)) {
+
+        mostrar(
+          "Código QR inválido",
+          "#fee2e2",
+          "#991b1b"
+        );
+
         return;
       }
 
-      ultimoQR = texto;
-      ultimoTiempo = ahora;
+      const ahora = Date.now();
 
-      detectados.add(texto);
+      if (ahora - (intentos.get(id) || 0) < 3000) {
+        return;
+      }
 
-      contador.textContent = detectados.size;
+      intentos.set(id, ahora);
+
+      if (registrados.has(id)) {
+
+        mostrar(
+          "Tarjeta ya registrada\n" + id,
+          "#fef3c7",
+          "#92400e"
+        );
+
+        return;
+      }
+
+      procesando = true;
 
       mostrar(
-        "QR detectado correctamente\n\n" +
-        "Contenido: " + texto + "\n\n" +
-        "Cantidad de caracteres: " + texto.length,
-        "#d1fae5",
-        "#065f46"
+        "Registrando almuerzo...\n" + id,
+        "#dbeafe",
+        "#1e40af"
       );
 
-      if (navigator.vibrate) {
-        navigator.vibrate(150);
+      try {
+
+        const respuesta = await fetch(API_URL, {
+          method: "POST",
+          body: new URLSearchParams({ id: id }),
+          redirect: "follow"
+        });
+
+        if (!respuesta.ok) {
+          throw new Error("HTTP " + respuesta.status);
+        }
+
+        const datos = await respuesta.json();
+
+        if (!datos.success) {
+          throw new Error(
+            datos.error || "Registro rechazado"
+          );
+        }
+
+        registrados.add(id);
+
+        if (datos.duplicate) {
+
+          mostrar(
+            "Esta tarjeta ya fue registrada hoy\n" + id,
+            "#fef3c7",
+            "#92400e"
+          );
+
+        } else {
+
+          total++;
+          contador.textContent = total;
+
+          mostrar(
+            "¡Almuerzo registrado!\n\n" +
+            id + "\n" + datos.hora,
+            "#d1fae5",
+            "#065f46"
+          );
+
+          if (navigator.vibrate) {
+            navigator.vibrate(150);
+          }
+        }
+
+      } catch (error) {
+
+        mostrar(
+          "No se pudo confirmar el registro\n" +
+          error.message,
+          "#fee2e2",
+          "#991b1b"
+        );
+
+      } finally {
+
+        procesando = false;
+
       }
     }
 
@@ -217,6 +297,7 @@
 
 </body>
 </html>
+
 
 
 
