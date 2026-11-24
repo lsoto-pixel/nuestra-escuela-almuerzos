@@ -57,6 +57,17 @@
     button:disabled {
       opacity: 0.5;
     }
+
+    #contador {
+      font-size: 32px;
+      font-weight: bold;
+      color: #174b4a;
+    }
+
+    .nota {
+      font-size: 12px;
+      color: #777;
+    }
   </style>
 </head>
 
@@ -65,7 +76,7 @@
   <div class="container">
     <h1>Nuestra Escuela</h1>
     <h2>Registro de almuerzos</h2>
-    <p>Prueba de escáner QR</p>
+    <p>Escáner QR</p>
 
     <button id="iniciar">Activar cámara</button>
     <button id="detener" disabled>Detener cámara</button>
@@ -76,76 +87,190 @@
       Esperando escaneo...
     </div>
 
-    <p>Modo de prueba · Sin registro de datos</p>
+    <p>Envíos confirmados en esta sesión</p>
+    <div id="contador">0</div>
+
+    <p class="nota">Modo de prueba</p>
   </div>
 
   <script>
+    const API_URL =
+      "https://script.google.com/a/macros/nuestraescuela.org/s/AKfycbzkahVGdHkVrlH-aCsn0yp4Y8-DEQDPEROn--1DGA7MpvLZpj4lTJLWlPjJ6ntT9PH6/exec";
+
     const scanner = new Html5Qrcode("reader");
+
     const resultado = document.getElementById("resultado");
     const iniciar = document.getElementById("iniciar");
     const detener = document.getElementById("detener");
+    const contador = document.getElementById("contador");
 
-    let ultimoQR = "";
-    let ultimoTiempo = 0;
+    let procesando = false;
+    let total = 0;
 
-    function escaneoExitoso(texto) {
-      const ahora = Date.now();
+    const registrados = new Set();
+    const intentos = new Map();
 
-      if (
-        texto === ultimoQR &&
-        ahora - ultimoTiempo < 3000
-      ) {
+    function mostrar(mensaje, fondo, color) {
+      resultado.textContent = mensaje;
+      resultado.style.background = fondo;
+      resultado.style.color = color;
+    }
+
+    async function escaneoExitoso(texto) {
+
+      const id = texto.trim();
+
+      if (procesando) return;
+
+      if (!/^\d{5,25}$/.test(id)) {
+        mostrar(
+          "Código QR inválido",
+          "#fee2e2",
+          "#991b1b"
+        );
         return;
       }
 
-      ultimoQR = texto;
-      ultimoTiempo = ahora;
+      if (registrados.has(id)) {
+        mostrar(
+          "Tarjeta ya registrada: " + id,
+          "#fef3c7",
+          "#92400e"
+        );
+        return;
+      }
 
-      resultado.style.background = "#d1fae5";
-      resultado.style.color = "#065f46";
+      const ahora = Date.now();
 
-      resultado.textContent =
-        "QR detectado correctamente: " + texto;
+      if (ahora - (intentos.get(id) || 0) < 3000) {
+        return;
+      }
 
-      if (navigator.vibrate) {
-        navigator.vibrate(150);
+      intentos.set(id, ahora);
+      procesando = true;
+
+      mostrar(
+        "Enviando registro: " + id,
+        "#dbeafe",
+        "#1e40af"
+      );
+
+      try {
+
+        const respuesta = await fetch(API_URL, {
+          method: "POST",
+          body: new URLSearchParams({ id: id }),
+          redirect: "follow"
+        });
+
+        if (!respuesta.ok) {
+          throw new Error("HTTP " + respuesta.status);
+        }
+
+        const datos = await respuesta.json();
+
+        if (!datos.success) {
+          throw new Error(
+            datos.error || "Registro rechazado"
+          );
+        }
+
+        registrados.add(id);
+
+        total++;
+        contador.textContent = total;
+
+        mostrar(
+          "Registro exitoso: " + id,
+          "#d1fae5",
+          "#065f46"
+        );
+
+        if (navigator.vibrate) {
+          navigator.vibrate(150);
+        }
+
+      } catch (error) {
+
+        mostrar(
+          "No se pudo confirmar el registro: " +
+          error.message,
+          "#fee2e2",
+          "#991b1b"
+        );
+
+      } finally {
+        procesando = false;
       }
     }
 
     iniciar.onclick = async function () {
+
       iniciar.disabled = true;
 
       try {
+
         await scanner.start(
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 220, height: 220 }
+            qrbox: {
+              width: 220,
+              height: 220
+            }
           },
           escaneoExitoso,
           function () {}
         );
 
         detener.disabled = false;
-        resultado.textContent = "Cámara activa. Escanea un QR.";
+
+        mostrar(
+          "Cámara activa. Escanea una tarjeta.",
+          "#f0f0f0",
+          "#333333"
+        );
 
       } catch (error) {
-        resultado.textContent = "Error de cámara: " + error;
+
+        mostrar(
+          "Error de cámara: " + error,
+          "#fee2e2",
+          "#991b1b"
+        );
+
         iniciar.disabled = false;
       }
     };
 
     detener.onclick = async function () {
+
       try {
+
         await scanner.stop();
+
         detener.disabled = true;
         iniciar.disabled = false;
-        resultado.textContent = "Cámara detenida.";
+
+        mostrar(
+          "Cámara detenida.",
+          "#f0f0f0",
+          "#333333"
+        );
+
       } catch (error) {
-        resultado.textContent = "Error: " + error;
+
+        mostrar(
+          "Error: " + error,
+          "#fee2e2",
+          "#991b1b"
+        );
       }
     };
   </script>
 
 </body>
 </html>
+
+
+
